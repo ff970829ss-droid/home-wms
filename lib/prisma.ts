@@ -1,13 +1,39 @@
-import { PrismaClient } from '@prisma/client'
+import { PrismaClient } from '@prisma/client';
 
-// 核心修复：在实例化之前，若检测无真实环境变量，直接在 Node 环境中注入 Dummy 地址
-// 完美绕过 TypeScript 对 PrismaClientOptions 的严格类型校验
-if (!process.env.DATABASE_URL) {
-  process.env.DATABASE_URL = "postgresql://dummy:dummy@localhost:5432/dummy"
-}
+// 1. 精准识别 Vercel 构建环境
+const isBuildPhase =
+  process.env.npm_lifecycle_event === 'build' ||
+  process.env.NEXT_PHASE === 'phase-production-build' ||
+  process.env.CI === '1';
 
-const globalForPrisma = globalThis as unknown as { prisma: PrismaClient | undefined }
+// 2. 构建期的“黑洞替身”：无论 Next.js 怎么扫描、调用，都只返回空数组，绝对不报错
+const buildTimeMock = new Proxy(
+  {},
+  {
+    get: () =>
+      new Proxy(
+        {},
+        {
+          get: () => () => Promise.resolve([]),
+        },
+      ),
+  },
+) as unknown as PrismaClient;
 
-export const prisma = globalForPrisma.prisma ?? new PrismaClient()
+// 3. 运行时的全局单例缓存
+const globalForPrisma = globalThis as unknown as {
+  prismaInstance: PrismaClient | undefined;
+};
 
-if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma
+// 4. 终极防御导出：打包时用替身，上线后才真正连接数据库
+export const prisma = isBuildPhase
+  ? buildTimeMock
+  : new Proxy({} as PrismaClient, {
+      get: (_: unknown, prop: string | symbol) => {
+        // 只有当 API 被真正访问时，才执行耗时的数据库初始化
+        if (!globalForPrisma.prismaInstance) {
+          globalForPrisma.prismaInstance = new PrismaClient();
+        }
+        return (globalForPrisma.prismaInstance as any)[prop];
+      },
+    });
