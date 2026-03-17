@@ -1,11 +1,12 @@
 import { NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { getPrisma } from '@/lib/prisma';
 
 // 官方标准：明确告知框架此路由为动态渲染，禁止构建期预加载
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: Request, context: any) {
   try {
+    const prisma = getPrisma();
     const params = await context.params;
     if (!params?.id) return NextResponse.json({ error: 'Missing ID' }, { status: 400 });
 
@@ -18,6 +19,7 @@ export async function GET(request: Request, context: any) {
 
 export async function PATCH(request: Request, context: any) {
   try {
+    const prisma = getPrisma();
     const params = await context.params;
     if (!params?.id) return NextResponse.json({ error: 'Missing ID' }, { status: 400 });
 
@@ -34,6 +36,7 @@ export async function PATCH(request: Request, context: any) {
 
 export async function DELETE(request: Request, context: any) {
   try {
+    const prisma = getPrisma();
     const params = await context.params;
     if (!params?.id) return NextResponse.json({ error: 'Missing ID' }, { status: 400 });
 

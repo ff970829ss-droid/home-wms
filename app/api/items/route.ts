@@ -3,10 +3,11 @@ export const fetchCache = 'force-no-store';
 
 import { NextResponse } from "next/server";
 
-import { prisma } from "@/lib/prisma";
+import { getPrisma } from "@/lib/prisma";
 
 export const runtime = "nodejs";
 export async function GET() {
+  const prisma = getPrisma();
   const items = await prisma.item.findMany({
     orderBy: { createdAt: "desc" },
   });
@@ -15,6 +16,7 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  const prisma = getPrisma();
   let body: unknown;
   try {
     body = await request.json();
