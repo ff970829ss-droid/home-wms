@@ -1,33 +1,14 @@
 import { PrismaClient } from '@prisma/client';
 
-const globalForPrisma = globalThis as unknown as { prisma: PrismaClient | undefined };
-
-// 智能初始化逻辑：没密码时用替身，有密码时动真格
-const getPrismaClient = () => {
-  if (!process.env.DATABASE_URL) {
-    console.warn(
-      "⚠️ 警告: 未检测到 DATABASE_URL。如果是在构建期，这是正常的。已启用替身规避崩溃。",
-    );
-    // 安全替身：无论 Next.js 怎么预渲染，都统一返回 null
-    return new Proxy(
-      {},
-      {
-        get: () =>
-          new Proxy(
-            {},
-            {
-              get: () => () => Promise.resolve(null),
-            },
-          ),
-      },
-    ) as any;
-  }
-  return new PrismaClient();
-};
-
-// 明确声明类型，防止 TypeScript 报错
-export const prisma: PrismaClient = globalForPrisma.prisma ?? getPrismaClient();
-
-if (process.env.NODE_ENV !== 'production' && process.env.DATABASE_URL) {
-  globalForPrisma.prisma = prisma;
+// 核心防御：如果 Vercel 打包机拿不到环境变量，塞入一个绝对安全的【假地址】。
+// 这样既不会泄露真实密码，又能完美骗过 Prisma 的初始化非空校验。
+if (!process.env.DATABASE_URL) {
+  process.env.DATABASE_URL = "postgresql://dummy:dummy@localhost:5432/dummy";
 }
+
+// 官方标准单例模式，没有任何 TypeScript 违规操作
+const globalForPrisma = globalThis as unknown as { prisma: PrismaClient };
+
+export const prisma = globalForPrisma.prisma || new PrismaClient();
+
+if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma;
