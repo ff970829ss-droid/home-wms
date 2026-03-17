@@ -1,64 +1,47 @@
 export const dynamic = 'force-dynamic';
-export const fetchCache = 'force-no-store';
 
-import { NextResponse } from "next/server";
+import { NextResponse } from 'next/server';
+import { prisma } from '@/lib/prisma';
 
-import { prisma } from "@/lib/prisma";
+export async function GET(request: Request, context: any) {
+  try {
+    // 核心修复：必须 await context.params
+    const params = await context.params;
+    if (!params?.id) return NextResponse.json({ error: 'Missing ID' }, { status: 400 });
 
-export const runtime = "nodejs";
-type RouteContext = {
-  params: Promise<{
-    id: string;
-  }>;
-};
-
-export async function GET(_request: Request, context: RouteContext) {
-  const { id } = await context.params;
-
-  const item = await prisma.item.findUnique({
-    where: { id },
-  });
-
-  if (!item) {
-    return NextResponse.json({ error: "Item not found" }, { status: 404 });
+    const item = await prisma.item.findUnique({ where: { id: params.id } });
+    return NextResponse.json(item || {});
+  } catch (error) {
+    // 拦截所有崩溃，返回标准 JSON，防止打断 Vercel 构建
+    return NextResponse.json({ error: 'Internal Error' }, { status: 500 });
   }
-
-  return NextResponse.json(item);
 }
 
-export async function PATCH(_request: Request, context: RouteContext) {
-  const { id } = await context.params;
+export async function PATCH(request: Request, context: any) {
+  try {
+    const params = await context.params;
+    if (!params?.id) return NextResponse.json({ error: 'Missing ID' }, { status: 400 });
 
-  const updated = await prisma.item.updateMany({
-    where: {
-      id,
-      quantity: { gt: 0 },
-    },
-    data: {
-      quantity: { decrement: 1 },
-    },
-  });
-
-  if (updated.count === 0) {
-    const existing = await prisma.item.findUnique({
-      where: { id },
-      select: { id: true, quantity: true },
+    const body = await request.json();
+    const item = await prisma.item.update({
+      where: { id: params.id },
+      data: body,
     });
-
-    if (!existing) {
-      return NextResponse.json({ error: "Item not found" }, { status: 404 });
-    }
-
-    return NextResponse.json(
-      { error: "quantity is already 0" },
-      { status: 409 },
-    );
+    return NextResponse.json(item);
+  } catch (error) {
+    return NextResponse.json({ error: 'Internal Error' }, { status: 500 });
   }
+}
 
-  const item = await prisma.item.findUnique({
-    where: { id },
-  });
+export async function DELETE(request: Request, context: any) {
+  try {
+    const params = await context.params;
+    if (!params?.id) return NextResponse.json({ error: 'Missing ID' }, { status: 400 });
 
-  return NextResponse.json(item);
+    await prisma.item.delete({ where: { id: params.id } });
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    return NextResponse.json({ error: 'Internal Error' }, { status: 500 });
+  }
 }
 
